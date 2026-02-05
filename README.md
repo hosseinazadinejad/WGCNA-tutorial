@@ -28,6 +28,7 @@ WGCNA (Weighted Gene co-expression network analysis) is a systems biology method
   5. Relate modules to external traits
 
 **Common applications**
+
 - Biomarker discovery
 - Disease subtype characterization
 - Systems-level interpretation of omics data
@@ -41,7 +42,7 @@ The three main network types
 
 - Positive and negative correlations are treated equally
 - Strong negative correlation = strong connection
-- 	Useful when direction doesn’t matter
+- Useful when direction doesn’t matter
   
 **Rarely ideal for biological interpretation**
 
@@ -73,6 +74,7 @@ That means:
 
 - Most genes have few connections
 - A few hub genes have many connections
+  
 To get this behavior, WGCNA raises correlations to a power (β), but which power should we choose?
 That’s exactly what soft-threshold indices help us decide.
 
