@@ -1,0 +1,276 @@
+---
+title: "WGCNA tutorial"
+author: "Azadi-H"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Installing and loading packages
+
+```{r,eval=FALSE,echo=TRUE}
+setwd("C:/R directory/WGCNA") # you first need to set a working directory
+
+install.packages("BiocManager")
+library(BiocManager)
+BiocManager::install("WGCNA") # main package 
+BiocManager::install("GEOquery") # to download data from GEO dataset
+install.packages("vsn") # for data normalization
+install.packages("pheatmap") # for data visualization(creating heatmap)
+install.packages("ggplot2")
+
+# You can use SetRepositories() to access large package repositories(rather than CRAN) 
+```
+
+
+```{r}
+library(patchwork)
+library(ggplot2)
+library(pheatmap)
+library(vsn)
+library(WGCNA)
+library(GEOquery)
+
+
+```
+
+## Loading data
+We have two options for downloading data:
+
+1. download files directly from GEO data set( as a compressed file), extract the file and load count matrix and meta data into R
+
+```{r}
+exp_data<-read.delim("C:/R directory/WGCNA/Data/GSE24279_series_matrix.txt",header = T,comment.char = "!")
+class(exp_data) # count matrix
+rownames(exp_data)<-exp_data[,1]
+exp_data<-exp_data[,-1]
+meta_data<-read.delim("C:/R directory/WGCNA/Data/GPL10944.txt",header = T,comment.char = "#")
+# meta data containing probe IDs and gene names
+clinic_data<-read.csv("C:/R directory/WGCNA/Data/phenodata.csv",header = T)
+# clinical data( it can be age, gender, sample type,..)
+rownames(clinic_data)<-clinic_data[,1]
+clinic_data$vital.status<-c(rep(0,93),rep(1,92)) # adding a fake vital status column for learning..
+clinic_data<-clinic_data[,-1]
+colnames(clinic_data)<-c("diseas","sample_type","vital_status")
+```
+
+
+Here, we have characters(probe IDs) as first column of count matrix, in such condition make sure to put those IDs as rownames and remove the column to avoid future error.
+
+2.Download the data with **getGEO()** function
+
+this fuction will get all the data we need from GEO
+
+```{r eval=FALSE, include=TRUE}
+series<- "GSE24279"
+gset<-getGEO(series,GSEMatrix = T,AnnotGPL = T,destdir = "C:/Rworkingdirectory/Data")
+# destdir= specify the folder we want to save our data
+exprs
+```
+
+**getGEO** gives us a **Expression set object** then we can use **exprs()** to get expression matrix from gset and **pData()** to get clinical data from gset.
+
+## Quality control and data normalization
+
+We have count matrix and we should take a look at our data. We have 185 columns(samples) and 847 rows(genes), so we can not use heatmap or boxplot. we can plot Mean-SD relationship for genes
+
+```{r}
+genemean<-rowMeans(exp_data)
+genesd<-apply(exp_data, 1,sd)
+plot(genemean,genesd)
+
+```
+
+
+in the plot we can see many genes have low expression and low variance, they collapse into a dense cloud and highly expressed genes have increasing variance, form a fan shape to the right of the plot.This is **heteroscedasticity** and we should normalize our data.
+
+PCA (principle component analysis) can be used for further data exploration.
+
+```{r}
+pca<-prcomp(exp_data)
+pca_data<-data.frame(pca$rotation[,1:3],clinic_data$sample_type)
+ggplot(pca_data,aes(PC1,PC2,color = clinic_data.sample_type))+geom_point(size=3)+theme_bw()
+
+
+
+```
+
+
+
+We can see in the PCA that the samples are not grouped well. The major reason for that is our data is raw. In the next step we try to normalize our data using VSn **vsnpackage**
+
+## Variant stabilizing normalization
+
+vsn works with Expression Set data format.An expression set is a data object consisting of two entities: expression data(exprs) and phenotype data(pData). Now our data is in data frame format, so it should be first converted to a matrix and then to the expression set object
+
+```{r eval=TRUE, include=TRUE}
+exp_data2<-exp_data # make a copy of original data
+exp_data2<-as.matrix(exp_data2)
+eset_obj<-ExpressionSet(assayData = exp_data2)
+# we just put expression data in the object
+vsn_fit<-vsn2(eset_obj)
+
+```
+
+
+vsn package has **meanSdPlot()** function for quality control before and after the normalization.
+
+```{r eval=TRUE, include=TRUE}
+
+par(mfrow=c(1,2))
+plot_before<-meanSdPlot(eset_obj)
+vst_data<-predict(vsn_fit,exprs(eset_obj))
+plot_after<-meanSdPlot(vsn_fit)
+par(mfrow=c(1,1))
+
+```
+
+
+
+A manual gene-level mean-SD scatterplot was first used to visualize heteroscedasticity in the raw data.Variance stabilization was then formally assessed using the **meanSdPlot** function which summarize the mean-variance relationship across expression bins.
+
+## WGCNA
+
+**We should use normalize data as input for WGCNA. In WGCNA we need our genes to be in columns and our samples in raws.**
+
+```{r include=TRUE}
+main_data<-exprs(vsn_fit)
+main_data<-t(main_data)
+goodSamples(main_data,minFraction = 0.9)
+all(goodSamples(main_data))
+goodGenes(main_data,minFraction = 0.9)
+all(goodGenes(main_data))
+
+
+```
+goodSamples and goodgenes functions are for QC of data. they help us when we have NA values in our data. minFraction argument define the minimum fraction of valid(nn-missing ) expression values required for a gene or sample to be kept in the analysis. since we do not have NA values, it does not affect our data.
+
+We can use hierarchical clustering of samples to see outlier samples and remove them with cutreestatic function. In this tutorial we will use all samples 
+
+```{r}
+clust<-hclust(dist(main_data),method = "average")
+# method specify the method for clustering.
+jpeg("Data/hclust_samples.jpeg",res = 150)
+plot(clust)
+dev.off()
+# cutreeStatic(clust,cutHeight = 6000,minSize = 2)
+# main_edited<-main_data[clust,cutHeight = 6000,minSize = 2>0,]
+
+
+```
+
+We should convert sample type data("PDAC","CP","Healthy") into numerical values(0,1,2). 
+
+```{r}
+
+clinic_data<-clinic_data[,-1]
+clinic_data$sample_type[clinic_data$sample_type=="Healthy"]<-0
+clinic_data$sample_type[clinic_data$sample_type=="CP"]<-1
+clinic_data$sample_type[clinic_data$sample_type=="PDAC"]<-2
+
+clinic_data$sample_type<-as.numeric(clinic_data[,1])
+```
+
+
+#Analysis of scale free topology for soft threshold
+
+ **please refer to the README file for the explanation**
+```{r}
+sft<-pickSoftThreshold(main_data,powerVector = 1:20,networkType = "signed hybrid")
+sizeGrWindow(9, 5)
+par(mfrow = c(1,2))
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],pch=16,col="darkblue",cex=1)
+#scale free topology plot
+plot(sft$fitIndices[,1], sft$fitIndices[,5],pch=16,cex=1)
+#mean connectivity plot
+
+
+```
+
+
+#creating adjancency matrix
+
+```{r}
+my_power= 4
+adj_data<-adjacency(main_data,power = my_power)
+dim(adj_data)
+View(adj_data)
+```
+
+#Topological overlap matrix similarity and dissimilarity
+
+Please refer to README file for explanation
+
+```{r}
+TOM<-1-TOMsimilarity(adj_data)
+View(TOM)
+
+```
+
+
+# Clustering and module detection
+
+```{r}
+cluster<-hclust(dist(TOM),method = "average")
+#detecting modules
+cluster_data<-cutreeDynamic(cluster,distM = TOM,minClusterSize = 25 ) 
+#minClusterSize determine the module size
+table(cluster_data)
+plotDendroAndColors(cluster,labels2colors(cluster_data),dendroLabels = F)
+
+```
+
+## Calculating module eigengenes and merge similar modules
+
+
+```{r}
+module_eigen<-moduleEigengenes(main_data,labels2colors(cluster_data))
+View(module_eigen$eigengenes)
+eigen_disimilarity<-1-cor(module_eigen$eigengenes)
+clust_eigen<-hclust(as.dist(eigen_disimilarity),method = "average")
+
+plot(clust_eigen)
+abline(h=0.4)
+# We merge modules which are below the 0.4 line
+merged_modules<-mergeCloseModules(main_data,labels2colors(cluster_data),cutHeight = 0.4)
+table(merged_modules$colors)
+
+pdf("Data/final dendrogram.pdf")
+plotDendroAndColors(dendro = cluster,colors = merged_modules[["colors"]])
+dev.off()
+
+#put close eigenvectors next to each other
+ordered_modules<-orderMEs(moduleEigengenes(main_data,merged_modules$colors))
+
+
+```
+
+# correlating clinical features with modules
+
+```{r}
+cor_module_trait<-cor(ordered_modules$eigengenes,clinic_data,"p")
+p_value<-corPvalueStudent(cor_module_trait,nrow(main_data))
+
+mytext <- paste("cor : ", round(cor_module_trait , 2) , "\n" ,"pval : ",round(p_value , 2))
+dim(mytext) <- dim(cor_module_trait)
+
+
+pdf("Data/module-trait association.pdf")
+labeledHeatmap(cor_module_trait,xLabels = names(clinic_data),yLabels = names(ordered_modules$eigengenes),colors = blueWhiteRed(100),
+               textMatrix = mytext , setStdMargins = F , cex.text = 0.5   )
+dev.off()
+
+
+
+```
+
+#Extracting genes of specific module
+
+```{r}
+
+table(merged_modules$colors)
+selected_cluster <- colnames(main_data)[merged_modules$colors == "greenyellow"]
+writeLines(selected_cluster , "selected cluster.txt")
+
+
+```
+
