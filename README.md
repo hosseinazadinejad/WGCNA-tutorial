@@ -179,5 +179,5 @@ TOM -> incorporates shared neighbors
 
 dissTOM is a distance matrix for gene clustering.
 
-** You can see the output and scripts of this tutorial in this link:**
+**You can see the output and scripts of this tutorial in this link:**
 https://h-azadi.github.io/WGCNA-tutorial/
