@@ -8,7 +8,12 @@ We published a research paper based on this dataset on 2025 which can be accesse
 
 https://www.sciencedirect.com/science/article/abs/pii/S2773044125000361
 
+
+
 please take a look at it in your free time.
+
+** You can see the output and scripts of this tutorial in this link:**
+https://h-azadi.github.io/WGCNA-tutorial/
 
 Now, let's take a look at WGCNA :
 
@@ -173,3 +178,6 @@ TOM -> incorporates shared neighbors
 
 
 dissTOM is a distance matrix for gene clustering.
+
+** You can see the output and scripts of this tutorial in this link:**
+https://h-azadi.github.io/WGCNA-tutorial/
